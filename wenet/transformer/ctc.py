@@ -11,6 +11,7 @@ class CTC(torch.nn.Module):
         encoder_output_size: int,
         dropout_rate: float = 0.0,
         reduce: bool = True,
+        simplified: bool = False,
     ):
         """ Construct CTC module
         Args:
@@ -26,7 +27,10 @@ class CTC(torch.nn.Module):
         self.ctc_lo = torch.nn.Linear(eprojs, odim)
 
         reduction_type = "sum" if reduce else "none"
-        self.ctc_loss = torch.nn.CTCLoss(reduction=reduction_type)
+        # self.ctc_loss = torch.nn.CTCLoss(reduction=reduction_type)
+        import warpctc_pytorch as warp_ctc
+        self.ctc_loss = warp_ctc.CTCLoss(simplified=simplified)
+        self.simplified = simplified
 
     def forward(self, hs_pad: torch.Tensor, hlens: torch.Tensor,
                 ys_pad: torch.Tensor, ys_lens: torch.Tensor) -> torch.Tensor:
@@ -43,9 +47,14 @@ class CTC(torch.nn.Module):
         # ys_hat: (B, L, D) -> (L, B, D)
         ys_hat = ys_hat.transpose(0, 1)
         ys_hat = ys_hat.log_softmax(2)
-        loss = self.ctc_loss(ys_hat, ys_pad, hlens, ys_lens)
+        ys_true = torch.cat([ys_pad[i, :l] for i, l in enumerate(ys_lens)])
+        ys_true = ys_true.cpu().int()
+        hlens = hlens.cpu().int()
+        ys_lens = ys_lens.cpu().int()
+        loss = self.ctc_loss(ys_hat, ys_true, hlens, ys_lens)
         # Batch-size average
         loss = loss / ys_hat.size(1)
+        loss = loss.to(hs_pad.device)
         return loss
 
     def log_softmax(self, hs_pad: torch.Tensor) -> torch.Tensor:

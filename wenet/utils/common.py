@@ -174,6 +174,12 @@ def remove_duplicates_and_blank(hyp: List[int]) -> List[int]:
             cur += 1
     return new_hyp
 
+def remove_blank(hyp: List[int]) -> List[int]:
+    new_hyp: List[int] = []
+    for x in hyp:
+        if x != 0:
+            new_hyp.append(x)
+    return new_hyp
 
 def log_add(args: List[int]) -> float:
     """

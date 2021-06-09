@@ -30,6 +30,7 @@ from wenet.utils.cmvn import load_cmvn
 from wenet.utils.common import (IGNORE_ID, add_sos_eos, log_add,
                                 remove_duplicates_and_blank, th_accuracy,
                                 reverse_pad_list)
+from wenet.utils.common import remove_blank
 from wenet.utils.mask import (make_pad_mask, mask_finished_preds,
                               mask_finished_scores, subsequent_mask)
 
@@ -323,7 +324,10 @@ class ASRModel(torch.nn.Module):
         mask = make_pad_mask(encoder_out_lens)  # (B, maxlen)
         topk_index = topk_index.masked_fill_(mask, self.eos)  # (B, maxlen)
         hyps = [hyp.tolist() for hyp in topk_index]
-        hyps = [remove_duplicates_and_blank(hyp) for hyp in hyps]
+        if self.ctc.simplified:
+            hyps = [remove_blank(hyp) for hyp in hyps]
+        else:
+            hyps = [remove_duplicates_and_blank(hyp) for hyp in hyps]
         return hyps
 
     def _ctc_prefix_beam_search(
@@ -707,7 +711,11 @@ def init_asr_model(configs):
         assert configs['decoder_conf']['r_num_blocks'] > 0
         decoder = BiTransformerDecoder(vocab_size, encoder.output_size(),
                                        **configs['decoder_conf'])
-    ctc = CTC(vocab_size, encoder.output_size())
+
+
+    simplified = configs.get('simplified_ctc', False)
+    print('Using simplified CTC {}'.format(simplified))
+    ctc = CTC(vocab_size, encoder.output_size(), simplified=simplified)
     model = ASRModel(
         vocab_size=vocab_size,
         encoder=encoder,
